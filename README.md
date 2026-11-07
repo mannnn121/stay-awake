@@ -30,7 +30,7 @@ The remote is `git@github.com-mannnn121:mannnn121/stay-awake.git`.
 - API: https://huggingface.co/spaces/ferropayo/stay-awake
 - Source: https://github.com/mannnn121/stay-awake
 
-The Vercel project is `stay-awake` on team `0b1111001's projects`, with the Next.js app rooted at `web/`. The page uploads an image to `/api/predict`, and that route calls the Space.
+The Vercel project is `stay-awake` on team `0b1111001's projects`, with the Next.js app rooted at `web/`. The page can open the camera and capture a frame, or upload an image. Either one is posted to `/api/predict`, and that route calls the Space.
 
 ## What runs where
 
