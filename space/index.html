@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stay Awake</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --ink: #1c1917;
+      --muted: #57534e;
+      --line: #e7e5e4;
+      --paper: #fafaf9;
+      --accent: #0f766e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #fafaf9;
+        --muted: #a8a29e;
+        --line: #44403c;
+        --paper: #1c1917;
+        --accent: #5eead4;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.5 ui-sans-serif, system-ui, sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+    }
+    main {
+      max-width: 40rem;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+    h1 { font-size: 1.75rem; margin: 0 0 0.4rem; }
+    p.lead { color: var(--muted); margin: 0 0 1.5rem; }
+    form {
+      display: grid;
+      gap: 0.75rem;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    input[type="file"] { max-width: 100%; }
+    .preview {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+    canvas {
+      width: 128px;
+      height: 128px;
+      image-rendering: pixelated;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #000;
+    }
+    .score { margin-top: 1rem; }
+    .bar {
+      height: 10px;
+      border-radius: 999px;
+      background: var(--line);
+      overflow: hidden;
+    }
+    .bar > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+    }
+    .label { font-size: 1.25rem; font-weight: 650; margin: 0.6rem 0 0.2rem; }
+    .meta { color: var(--muted); font-size: 0.9rem; }
+    button {
+      justify-self: start;
+      border: 0;
+      border-radius: 8px;
+      padding: 0.55rem 0.9rem;
+      background: var(--accent);
+      color: #042f2e;
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: progress; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Stay Awake</h1>
+    <p class="lead">64×64 grayscale CNN. The page rescales pixels by 1/255 and runs the trained network in your browser.</p>
+    <form id="form">
+      <label>
+        Image
+        <input id="file" type="file" accept="image/*" required>
+      </label>
+      <div class="preview">
+        <canvas id="view" width="64" height="64"></canvas>
+        <p class="meta">The square is the exact 64×64 grayscale input the model sees.</p>
+      </div>
+      <button id="run" type="submit" disabled>Score image</button>
+    </form>
+    <section class="score" hidden id="result">
+      <p class="label" id="label"></p>
+      <div class="bar" aria-hidden="true"><span id="fill"></span></div>
+      <p class="meta" id="detail"></p>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.wasm.min.js"></script>
+  <script>
+    const fileInput = document.querySelector("#file");
+    const canvas = document.querySelector("#view");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const button = document.querySelector("#run");
+    const result = document.querySelector("#result");
+    const label = document.querySelector("#label");
+    const fill = document.querySelector("#fill");
+    const detail = document.querySelector("#detail");
+
+    ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/";
+    ort.env.wasm.numThreads = 1;
+    const sessionPromise = ort.InferenceSession.create("./model.onnx", {
+      executionProviders: ["wasm"],
+    });
+    sessionPromise.then(() => { button.disabled = false; }).catch((error) => {
+      detail.textContent = "Model failed to load: " + error.message;
+      result.hidden = false;
+    });
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      const image = new Image();
+      image.onload = () => {
+        ctx.drawImage(image, 0, 0, 64, 64);
+        URL.revokeObjectURL(image.src);
+      };
+      image.src = URL.createObjectURL(file);
+    });
+
+    document.querySelector("#form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      button.disabled = true;
+      try {
+        const pixels = ctx.getImageData(0, 0, 64, 64).data;
+        const input = new Float32Array(64 * 64);
+        for (let i = 0, p = 0; i < input.length; i += 1, p += 4) {
+          input[i] = 0.299 * pixels[p] + 0.587 * pixels[p + 1] + 0.114 * pixels[p + 2];
+        }
+        const session = await sessionPromise;
+        const tensor = new ort.Tensor("float32", input, [1, 64, 64, 1]);
+        const output = await session.run({ input: tensor });
+        const score = output.score.data[0];
+        const awake = score >= 0.5;
+        label.textContent = awake ? "Awake" : "Not awake";
+        fill.style.width = Math.round(score * 100) + "%";
+        detail.textContent = "Positive-class score " + score.toFixed(3) + ". Scores at or above 0.5 are labeled Awake.";
+        result.hidden = false;
+      } catch (error) {
+        label.textContent = "Could not score this image";
+        detail.textContent = error.message;
+        result.hidden = false;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
