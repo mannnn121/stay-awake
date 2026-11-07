@@ -24,6 +24,14 @@ Host github.com-mannnn121
 
 The remote is `git@github.com-mannnn121:mannnn121/stay-awake.git`.
 
+## Deployment
+
+- Frontend: https://stay-awake-eight.vercel.app
+- API: https://huggingface.co/spaces/ferropayo/stay-awake
+- Source: https://github.com/mannnn121/stay-awake
+
+The Vercel project is `stay-awake` on team `0b1111001's projects`, with the Next.js app rooted at `web/`. The page uploads an image to `/api/predict`, and that route calls the Space.
+
 ## What runs where
 
 The model is the Keras network in `StayAwake.keras`. It takes a 64×64 grayscale image, rescales pixels by 1/255, and returns a sigmoid score. A score of 0.5 or higher is labeled **Awake**.
